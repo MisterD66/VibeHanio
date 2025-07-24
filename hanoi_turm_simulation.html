@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Türme von Hanoi</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    #game {
+      display: flex;
+      gap: 40px;
+      margin-top: 20px;
+    }
+    .tower {
+      width: 100px;
+      height: 300px;
+      background: #ddd;
+      display: flex;
+      flex-direction: column-reverse;
+      align-items: center;
+      padding: 10px;
+      border: 2px solid #888;
+    }
+    .disk {
+      height: 20px;
+      margin: 4px 0;
+      background: steelblue;
+      color: white;
+      text-align: center;
+      line-height: 20px;
+      border-radius: 4px;
+    }
+    .selected {
+      outline: 3px solid red;
+    }
+    #speedDisplay {
+      margin-left: 10px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>Türme von Hanoi</h1>
+  <label for="diskCount">Anzahl der Steine:</label>
+  <input type="number" id="diskCount" value="3" min="1" max="10" />
+  <button onclick="startGame()">Start</button>
+  <button onclick="startAutoMode()">Auto-Modus</button>
+  <label for="speedRange">Züge/Sekunde:</label>
+  <input type="range" id="speedRange" min="1" max="100" value="5" step="1" oninput="updateSpeedDisplay()" />
+  <span id="speedDisplay">5 Züge/s</span>
+  <button onclick="startMaxSpeedMode()">MAX Geschwindigkeit</button>
+  <p>Züge: <span id="moveCounter">0</span> | Aktuelle Geschwindigkeit: <span id="actualSpeed">0</span> Züge/s</p>
+  <p>Zeit: <span id="timeDisplay">0.0</span> s</p>
+  <div id="game">
+    <div class="tower" data-id="0" onclick="handleTowerClick(0)"></div>
+    <div class="tower" data-id="1" onclick="handleTowerClick(1)"></div>
+    <div class="tower" data-id="2" onclick="handleTowerClick(2)"></div>
+  </div>
+
+  <script>
+    let towers, selectedDisk = null, moveCounter = 0, autoInterval = null, diskCount = 3;
+    let maxSpeedRunning = false;
+    const towerEls = Array.from(document.querySelectorAll(".tower"));
+    const moveCounterEl = document.getElementById("moveCounter");
+    const actualSpeedEl = document.getElementById("actualSpeed");
+    const speedDisplay = document.getElementById("speedDisplay");
+    const timeDisplay = document.getElementById("timeDisplay");
+
+    let moveTimestamps = [];
+    let startTime = 0;
+
+    function updateSpeedDisplay() {
+      const val = document.getElementById("speedRange").value;
+      speedDisplay.textContent = `${val} Züge/s`;
+    }
+
+    function updateActualSpeed() {
+      const now = Date.now();
+      moveTimestamps = moveTimestamps.filter(t => now - t < 1000);
+      actualSpeedEl.textContent = moveTimestamps.length;
+      const timeElapsed = (now - startTime) / 1000;
+      timeDisplay.textContent = timeElapsed.toFixed(1);
+    }
+
+    function startGame() {
+      diskCount = parseInt(document.getElementById("diskCount").value);
+      towers = [[], [], []];
+      moveCounter = 0;
+      selectedDisk = null;
+      clearInterval(autoInterval);
+      maxSpeedRunning = false;
+      moveCounterEl.innerText = moveCounter;
+      moveTimestamps = [];
+      actualSpeedEl.textContent = 0;
+      timeDisplay.textContent = '0.0';
+      for (let i = diskCount; i >= 1; i--) towers[0].push(i);
+      render();
+      updateSpeedDisplay();
+      startTime = Date.now();
+    }
+
+    function render() {
+      for (let i = 0; i < 3; i++) {
+        const tower = towerEls[i];
+        tower.innerHTML = "";
+        const frag = document.createDocumentFragment();
+        for (const size of towers[i]) {
+          const disk = document.createElement("div");
+          disk.className = "disk";
+          disk.style.width = `${size * 20}px`;
+          disk.textContent = size;
+          frag.appendChild(disk);
+        }
+        tower.appendChild(frag);
+      }
+    }
+
+    function handleTowerClick(towerIndex) {
+      if (selectedDisk === null && towers[towerIndex].length > 0) {
+        selectedDisk = { disk: towers[towerIndex].pop(), from: towerIndex };
+        towerEls[towerIndex].classList.add("selected");
+        render();
+      } else if (selectedDisk !== null) {
+        const toTower = towers[towerIndex];
+        if (toTower.length === 0 || toTower[toTower.length - 1] > selectedDisk.disk) {
+          toTower.push(selectedDisk.disk);
+          moveCounter++;
+          moveCounterEl.innerText = moveCounter;
+          moveTimestamps.push(Date.now());
+          updateActualSpeed();
+        } else {
+          towers[selectedDisk.from].push(selectedDisk.disk);
+        }
+        selectedDisk = null;
+        towerEls.forEach(t => t.classList.remove("selected"));
+        render();
+      }
+    }
+
+    function startAutoMode() {
+      if (autoInterval) clearInterval(autoInterval);
+      maxSpeedRunning = false;
+      const movesPerSecond = parseInt(document.getElementById("speedRange").value);
+      const speed = 1000 / movesPerSecond;
+
+      autoInterval = setInterval(() => {
+        if (towers[2].length === diskCount) {
+          clearInterval(autoInterval);
+          return;
+        }
+        performRandomMove();
+      }, speed);
+    }
+
+    function startMaxSpeedMode() {
+      if (autoInterval) clearInterval(autoInterval);
+      maxSpeedRunning = true;
+      function loop() {
+        let start = performance.now();
+        while (performance.now() - start < 16.7) {
+          if (towers[2].length === diskCount) {
+            maxSpeedRunning = false;
+            return;
+          }
+          performRandomMove();
+        }
+        if (maxSpeedRunning) setTimeout(loop, 0);
+      }
+      loop();
+    }
+
+    function performRandomMove() {
+      let from, to;
+      for (let i = 0; i < 10; i++) {
+        from = Math.floor(Math.random() * 3);
+        to = Math.floor(Math.random() * 3);
+        if (from !== to && towers[from].length > 0) {
+          const disk = towers[from][towers[from].length - 1];
+          const toTop = towers[to][towers[to].length - 1];
+          if (!toTop || toTop > disk) {
+            towers[to].push(towers[from].pop());
+            moveCounter++;
+            moveCounterEl.innerText = moveCounter;
+            moveTimestamps.push(Date.now());
+            updateActualSpeed();
+            render();
+            break;
+          }
+        }
+      }
+    }
+
+    startGame();
+  </script>
+</body>
+</html>
